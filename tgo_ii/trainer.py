@@ -10,7 +10,15 @@ import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
-from .metrics import linear_cka, svcca, twonn_intrinsic_dimension, pairwise_matrix, adjacent_series
+from .metrics import (
+    linear_cka,
+    svcca,
+    twonn_intrinsic_dimension,
+    token_covariance_matrix,
+    token_coupling_ratio,
+    pairwise_matrix,
+    adjacent_series,
+)
 from .utils import ensure_dir, is_main_process, save_json, setup_logging, timestamp, unwrap_model
 from .visualization import (
     plot_bar,
@@ -28,6 +36,23 @@ LAYER_NAMES = [
     *[f"Layer_{i:02d}_Block{i:02d}" for i in range(1, 13)],
     "Layer_13_CLS_Final",
 ]
+
+
+
+
+def _token_tensor(layer_name: str, tensor: torch.Tensor) -> Optional[torch.Tensor]:
+    """
+    Return the token sequence tensor for token-covariance analysis.
+
+    - PatchEmbed output: [B, 196, D]
+    - PosEmbed / Transformer blocks: [B, 197, D]
+    - Final CLS: no token covariance defined
+    """
+    if tensor.ndim != 3:
+        return None
+    if layer_name == "Layer_13_CLS_Final":
+        return None
+    return tensor
 
 
 def _extract_image_vector(layer_name: str, tensor: torch.Tensor) -> torch.Tensor:
@@ -183,6 +208,11 @@ class Trainer:
 
         # Collect aligned image-level activations: one vector per image per layer.
         layer_batches: Dict[str, List[np.ndarray]] = {name: [] for name in self.layer_names}
+
+        # Token covariance accumulators (for token diversification checks)
+        token_cov_sums: Dict[str, np.ndarray] = {}
+        token_cov_counts: Dict[str, int] = {}
+
         for images, _, _ in tqdm(self.analysis_loader, desc=f"Analysis {epoch:03d}", disable=not is_main_process()):
             images = images.to(self.device, non_blocking=True)
             _ = self.model(images)
@@ -192,8 +222,24 @@ class Trainer:
                 t = cache.get(name)
                 if t is None:
                     continue
-                vec = _extract_image_vector(name, t.detach().float()).cpu().numpy()
+
+                t = t.detach().float()
+
+                # Image-level vector for CKA / SVCCA / TwoNN
+                vec = _extract_image_vector(name, t).cpu().numpy()
                 layer_batches[name].append(vec)
+
+                # Token-level covariance for token diversification
+                tok = _token_tensor(name, t)
+                if tok is not None:
+                    tok_np = tok.cpu().numpy()
+                    cov = token_covariance_matrix(tok_np, center_tokens=bool(self.cfg.analysis.twonn_use_centered))
+                    if name not in token_cov_sums:
+                        token_cov_sums[name] = np.zeros_like(cov, dtype=np.float64)
+                        token_cov_counts[name] = 0
+                    token_cov_sums[name] += cov * tok_np.shape[0]
+                    token_cov_counts[name] += tok_np.shape[0]
+
             hooks_mgr.clear()
 
         layer_vectors: Dict[str, np.ndarray] = {}
@@ -207,6 +253,18 @@ class Trainer:
         svcca_mat = pairwise_matrix(names, layer_vectors, svcca)
         id_scores = {name: twonn_intrinsic_dimension(layer_vectors[name], centered=self.cfg.analysis.twonn_use_centered) for name in names}
 
+        # Token covariance matrices and scores
+        token_cov_mats: Dict[str, np.ndarray] = {}
+        token_coupling_scores: Dict[str, float] = {}
+        for name, cov_sum in token_cov_sums.items():
+            count = max(token_cov_counts.get(name, 0), 1)
+            cov = (cov_sum / float(count)).astype(np.float64, copy=False)
+            token_cov_mats[name] = cov
+            token_coupling_scores[name] = token_coupling_ratio(cov)
+
+        token_cov_names = [n for n in self.layer_names if n in token_cov_mats]
+        token_coupling_mean = float(np.mean([token_coupling_scores[n] for n in token_cov_names])) if token_cov_names else 0.0
+
         # summary metrics
         off_diag_mask = ~np.eye(len(names), dtype=bool) if len(names) else np.array([])
         cka_mean = float(cka_mat[off_diag_mask].mean()) if len(names) > 1 else 0.0
@@ -219,6 +277,11 @@ class Trainer:
         np.save(epoch_dir / "cka_matrix.npy", cka_mat)
         np.save(epoch_dir / "svcca_matrix.npy", svcca_mat)
         np.save(epoch_dir / "twonn_id.npy", np.asarray([id_scores[n] for n in names], dtype=np.float64))
+
+        token_cov_dir = ensure_dir(epoch_dir / "token_covariance")
+        for name, cov in token_cov_mats.items():
+            np.save(token_cov_dir / f"{name}.npy", cov.astype(np.float32, copy=False))
+
         save_json(
             {
                 "epoch": epoch,
@@ -228,7 +291,9 @@ class Trainer:
                 "id_mean": id_mean,
                 "adjacent_cka_mean": float(adjacent_cka),
                 "adjacent_svcca_mean": float(adjacent_svcca),
+                "token_coupling_mean": token_coupling_mean,
                 "layer_ids": id_scores,
+                "token_coupling_by_layer": token_coupling_scores,
             },
             epoch_dir / "epoch_metrics.json",
         )
@@ -243,7 +308,9 @@ class Trainer:
                         "id_mean": id_mean,
                         "adjacent_cka_mean": float(adjacent_cka),
                         "adjacent_svcca_mean": float(adjacent_svcca),
+                        "token_coupling_mean": token_coupling_mean,
                         "layer_ids": id_scores,
+                        "token_coupling_by_layer": token_coupling_scores,
                     }
                 )
                 + "\n"
@@ -259,6 +326,7 @@ class Trainer:
                     "id_mean": id_mean,
                     "adjacent_cka_mean": float(adjacent_cka),
                     "adjacent_svcca_mean": float(adjacent_svcca),
+                    "token_coupling_mean": token_coupling_mean,
                 },
             },
             self.summaries_dir / f"epoch_{epoch:03d}.json",
@@ -274,6 +342,16 @@ class Trainer:
             plot_summary_grid(cka_mat, svcca_mat, id_scores, names, snap_dir / "summary_grid.png", title=f"TGO-II Summary Epoch {epoch}")
             plot_curve([cka_mean], snap_dir / "cka_mean_scalar.png", title="CKA Mean (scalar)", xlabel="Epoch", ylabel="CKA")
             plot_curve([svcca_mean], snap_dir / "svcca_mean_scalar.png", title="SVCCA Mean (scalar)", xlabel="Epoch", ylabel="SVCCA")
+            # Token covariance snapshot for the deepest token-bearing layer
+            if token_cov_names:
+                rep_name = token_cov_names[-1]
+                rep_cov = token_cov_mats[rep_name]
+                plot_heatmap(
+                    rep_cov,
+                    snap_dir / "token_covariance_heatmap.png",
+                    title=f"Token Covariance - {rep_name} - Epoch {epoch}",
+                    cmap="magma",
+                )
 
         return {
             "cka_mean": cka_mean,
@@ -281,7 +359,9 @@ class Trainer:
             "id_mean": id_mean,
             "adjacent_cka_mean": float(adjacent_cka),
             "adjacent_svcca_mean": float(adjacent_svcca),
+            "token_coupling_mean": token_coupling_mean,
             "layer_ids": id_scores,
+            "token_coupling_by_layer": token_coupling_scores,
         }
 
     def final_global_analysis(self):
@@ -294,7 +374,9 @@ class Trainer:
         id_mean = []
         adj_cka = []
         adj_svcca = []
+        token_coupling_mean = []
         layer_id_series: Dict[str, List[float]] = {}
+        token_coupling_series: Dict[str, List[float]] = {}
 
         with open(summary_file, "r", encoding="utf-8") as f:
             for line in f:
@@ -305,21 +387,27 @@ class Trainer:
                 id_mean.append(float(rec["id_mean"]))
                 adj_cka.append(float(rec["adjacent_cka_mean"]))
                 adj_svcca.append(float(rec["adjacent_svcca_mean"]))
+                token_coupling_mean.append(float(rec.get("token_coupling_mean", 0.0)))
                 for lname, val in rec["layer_ids"].items():
                     layer_id_series.setdefault(lname, []).append(float(val))
+                for lname, val in rec.get("token_coupling_by_layer", {}).items():
+                    token_coupling_series.setdefault(lname, []).append(float(val))
 
         plot_curve(cka_mean, self.global_dir / "cka_mean_vs_epoch.png", title="Mean CKA vs Epoch", xlabel="Epoch", ylabel="CKA")
         plot_curve(svcca_mean, self.global_dir / "svcca_mean_vs_epoch.png", title="Mean SVCCA vs Epoch", xlabel="Epoch", ylabel="SVCCA")
         plot_curve(id_mean, self.global_dir / "twonn_id_mean_vs_epoch.png", title="Mean TwoNN Intrinsic Dimension vs Epoch", xlabel="Epoch", ylabel="TwoNN ID")
         plot_curve(adj_cka, self.global_dir / "adjacent_cka_mean_vs_epoch.png", title="Adjacent-layer Mean CKA vs Epoch", xlabel="Epoch", ylabel="CKA")
         plot_curve(adj_svcca, self.global_dir / "adjacent_svcca_mean_vs_epoch.png", title="Adjacent-layer Mean SVCCA vs Epoch", xlabel="Epoch", ylabel="SVCCA")
+        plot_curve(token_coupling_mean, self.global_dir / "token_coupling_mean_vs_epoch.png", title="Mean Token Coupling Ratio vs Epoch", xlabel="Epoch", ylabel="Token Coupling Ratio")
         plot_multi_curve(layer_id_series, self.global_dir / "twonn_id_by_layer_vs_epoch.png", title="TwoNN ID by Layer vs Epoch", xlabel="Epoch", ylabel="ID")
+        if token_coupling_series:
+            plot_multi_curve(token_coupling_series, self.global_dir / "token_coupling_by_layer_vs_epoch.png", title="Token Coupling Ratio by Layer vs Epoch", xlabel="Epoch", ylabel="Token Coupling Ratio")
 
         # last epoch snapshot duplicated in global for convenience
         last_epoch = epochs[-1]
         last_snap = self.summaries_dir / f"epoch_{last_epoch:03d}"
         if last_snap.exists():
-            for fname in ["cka_heatmap.png", "svcca_heatmap.png", "twonn_id_bar.png", "summary_grid.png"]:
+            for fname in ["cka_heatmap.png", "svcca_heatmap.png", "twonn_id_bar.png", "summary_grid.png", "token_covariance_heatmap.png"]:
                 src = last_snap / fname
                 if src.exists():
                     dst = self.global_dir / f"final_{fname}"

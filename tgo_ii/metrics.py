@@ -108,6 +108,55 @@ def twonn_intrinsic_dimension(X: np.ndarray, centered: bool = True) -> float:
     return max(slope, 0.0)
 
 
+
+def token_covariance_matrix(X: np.ndarray, center_tokens: bool = True) -> np.ndarray:
+    """
+    Compute a token-token covariance matrix.
+
+    For a 2D input X with shape (T, D), tokens are treated as observations and
+    embedding dimensions as variables. For a 3D input X with shape (B, T, D),
+    the token covariance is computed per sample and averaged across the batch.
+
+    The returned matrix has shape (T, T).
+    """
+    X = np.asarray(X, dtype=np.float64)
+    if X.ndim == 2:
+        if X.shape[0] < 2 or X.shape[1] < 2:
+            return np.zeros((X.shape[0], X.shape[0]), dtype=np.float64)
+        if center_tokens:
+            X = X - X.mean(axis=1, keepdims=True)
+        denom = max(X.shape[1] - 1, 1)
+        return (X @ X.T) / denom
+
+    if X.ndim == 3:
+        if X.shape[1] < 2 or X.shape[2] < 2:
+            return np.zeros((X.shape[1], X.shape[1]), dtype=np.float64)
+        if center_tokens:
+            X = X - X.mean(axis=-1, keepdims=True)
+        denom = max(X.shape[2] - 1, 1)
+        cov = np.einsum("btd,bsd->bts", X, X) / denom
+        return cov.mean(axis=0)
+
+    raise ValueError(f"Expected a 2D or 3D array, got shape {X.shape}")
+
+
+def token_coupling_ratio(C: np.ndarray) -> float:
+    """
+    Off-diagonal absolute mass divided by total absolute mass.
+    Lower values indicate a more diagonal / less coupled token covariance matrix.
+    """
+    C = np.asarray(C, dtype=np.float64)
+    if C.ndim != 2 or C.shape[0] != C.shape[1]:
+        raise ValueError(f"Expected a square matrix, got shape {C.shape}")
+    absC = np.abs(C)
+    total = float(absC.sum())
+    if total <= 0:
+        return 0.0
+    diag = float(np.abs(np.diag(C)).sum())
+    off = max(total - diag, 0.0)
+    return float(off / total)
+
+
 def pairwise_matrix(
     names: List[str],
     data: Dict[str, np.ndarray],
