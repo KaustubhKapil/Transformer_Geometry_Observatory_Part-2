@@ -128,31 +128,6 @@ last.pth
 This significantly reduces storage overhead during long training runs.
 
 
-## Hypotheses
-
-### Hypothesis I: Progressive Specialization
-
-Representational complexity increases because successive layers learn increasingly distinct computations.
-
-Expected observations:
-
-- CKA decreases across depth
-- SVCCA decreases across depth
-- Intrinsic Dimension increases
-
-### Hypothesis II: Redundancy Despite Complexity
-
-Representational complexity increases while groups of layers remain highly similar.
-
-Expected observations:
-
-- CKA remains high within layer groups
-- SVCCA remains high within layer groups
-- Intrinsic Dimension increases
-
-This outcome would suggest representational redundancy and the existence of transformation zones within the network.
-
-
 ## Notes
 
 - This is the second of six Transformer Geometry Observatory analyses.
