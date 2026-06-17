@@ -1,0 +1,46 @@
+seed: 1337
+device: cuda
+output_dir: results_tgo_ii
+
+data:
+  train_dir: "D:/Kaustubh/imagenet100_final/train"
+  val_dir: "D:/Kaustubh/imagenet100_final/val"
+  class_subset_file: null
+  image_size: 224
+  num_workers: 12
+  pin_memory: true
+  analysis_set_size: 1000
+  analysis_seed: 2025
+  trajectory_set_size: 100
+  trajectory_seed: 2026
+
+model:
+  name: vit_small_patch16_224
+  pretrained: false
+  num_classes: 100
+  drop_rate: 0.0
+  drop_path_rate: 0.1
+
+train:
+  epochs: 100
+  batch_size: 32
+  lr: 0.001
+  min_lr: 1.0e-6
+  weight_decay: 0.05
+  opt: adamw
+  momentum: 0.9
+  label_smoothing: 0.1
+  clip_grad: 1.0
+  amp: true
+
+analysis:
+  summary_every: 5
+  snapshot_epochs: [1, 10, 20, 50, 100]
+  cka_sample_limit: 1000
+  svcca_pca_components: 50
+  svcca_variance_threshold: 0.99
+  twonn_use_centered: true
+
+checkpoint:
+  save_best: true
+  save_last: true
