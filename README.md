@@ -9,6 +9,7 @@ Here we analyze:
 - CKA (Centered Kernel Alignment)
 - SVCCA (Singular Vector Canonical Correlation Analysis)
 - TwoNN Intrinsic Dimension
+- Token Covariance
 
 These observables help us understand:
 
