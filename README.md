@@ -37,7 +37,7 @@ These observations motivate an important question:
 
 TGO-II is designed to answer this question through direct representation similarity analysis.
 
----
+
 
 ## Files
 
@@ -51,7 +51,7 @@ TGO-II is designed to answer this question through direct representation similar
 - `tgo_v2/observatory.py` — representation observatory engine
 - `tgo_v2/visualization.py` — plotting helpers
 
----
+
 
 ## Run
 
@@ -109,7 +109,7 @@ results_tgo_v2/
 └── logs/
 ```
 
----
+
 
 ## Checkpointing
 
@@ -127,7 +127,6 @@ last.pth
 
 This significantly reduces storage overhead during long training runs.
 
----
 
 ## Hypotheses
 
@@ -153,7 +152,6 @@ Expected observations:
 
 This outcome would suggest representational redundancy and the existence of transformation zones within the network.
 
----
 
 ## Notes
 
@@ -164,8 +162,6 @@ This outcome would suggest representational redundancy and the existence of tran
 - TwoNN estimates local intrinsic dimensionality.
 - TGO-II directly follows the findings of TGO-I.
 - The observatory is designed to investigate representational redundancy, specialization, and transformation zones in Vision Transformers.
-
----
 
 ## Relation to TGO-I
 
@@ -188,23 +184,3 @@ The findings of TGO-II will determine whether the clustered layers observed in T
 - Specialized computations
 - Distinct representational stages
 
----
-
-## Transformer Geometry Observatory Roadmap
-
-### Completed
-
-- TGO-I: Spectral Geometry Observatory
-
-### Current
-
-- TGO-II: Representation Geometry Observatory
-
-### Planned
-
-- TGO-III: Token Dynamics Observatory
-- TGO-IV: Attention Geometry Observatory
-- TGO-V: Optimization Geometry Observatory
-- TGO-VI: Information and Stability Observatory
-
-The long-term objective of TGO is to identify hidden representational bottlenecks, redundancy patterns, optimization constraints, and opportunities for more efficient Transformer architectures.
