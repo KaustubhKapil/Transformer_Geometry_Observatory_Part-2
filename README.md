@@ -1,4 +1,4 @@
-# TGO-Part-2
+# TGO-II: Representaion Similarity Observatory
 
 This repository implements a **Representation Geometry Observatory** for ViT-Small/16 on ImageNet-100. It is the second part of the **Transformer Geometry Observatory (TGO)** framework.
 
