@@ -160,3 +160,15 @@ The findings of TGO-II will determine whether the clustered layers observed in T
 - Specialized computations
 - Distinct representational stages
 
+## Results
+
+TGO-II yeilded decisive results:
+
+- SVCCA and CKA decrease over training epochs for mean and interlayer evaluations 
+- TwoNN-ID increase over the epochs
+
+### SVCCA and CKA
+It was observed that there was a significant drop in both mean and interlayer evaluations displayed an sudden fall in their respective ratio values and then stabilized in a gradual slope as the epochs progressed. This implies that the interlayer similarity decreases over time. This clearly disproves on of my prior hypothesis from TGO-I linking layer clustering to redundancy and potential removal. To add to this, it is also visible that token covarance matrix shows mild token similarities persisttant even at the end of the training schedule which might show that token diversification might not have been the dominant factor affecting rank explosion as hypothesized in TGO-I. This leaves us only with a few possibilites with the argument of **semantic exploration** becoming the major centre of experiments of the future TGOs.
+
+### TwoNN-ID
+This metric analysis brought a more exciting prospect. There was a clear rise in intrinsic dimensions or degrees of freedom over the training schedule. this leads us towards a new justification for the rise in rank of feature covariance matrix from TGO-I. **The representation/semantic manifold expands to higher degrees of freedom allowing more directions to be explored for cross-freature relations to develop**.
