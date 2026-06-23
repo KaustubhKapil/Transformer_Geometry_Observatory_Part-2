@@ -172,3 +172,6 @@ It was observed that there was a significant drop in both mean and interlayer ev
 
 ### TwoNN-ID
 This metric analysis brought a more exciting prospect. There was a clear rise in intrinsic dimensions or degrees of freedom over the training schedule. this leads us towards a new justification for the rise in rank of feature covariance matrix from TGO-I. **The representation/semantic manifold expands to higher degrees of freedom allowing more directions to be explored for cross-freature relations to develop**.
+
+### Important Note
+There is one striking similarity between trends observed in TGO-I and TGO-II, Block4 and Block5 transition i.e. Layer 4 and Layer 5 off 12 layers of ViT-Small/16 show a change in representation. Effective ranks and Anisotropic structures start to cluster after the 4th layer. This trend of representational variation can be seen through the adjacent layer CKA as well, layers 3 and 4 are similar but 4 and 5 show sudden mismatches. This is persistant through out the remaining results as well.
